@@ -1038,7 +1038,6 @@ class Client extends EventEmitter {
             }
 
             const result = await this.pupPage.evaluate(async (message) => {
-                const msg = window.Store.Msg.get(msgId);
                 const buffer = await window.WWebJS.downloadBuffer(
                     message.mediaUrl
                 );
