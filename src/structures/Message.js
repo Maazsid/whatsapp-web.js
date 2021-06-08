@@ -41,7 +41,14 @@ class Message extends Base {
          * Indicates if the message has media available for download
          * @type {boolean}
          */
-        this.hasMedia = data.clientUrl || data.deprecatedMms3Url;
+        this.hasMedia = data.clientUrl || data.deprecatedMms3Url ? true : false;
+
+
+        this.mimetype = data.mimetype;
+
+        this.mediaUrl = data.clientUrl || data.deprecatedMms3Url
+
+        this.filename = data.filename ? data.filename : null;
 
         /**
          * Message content

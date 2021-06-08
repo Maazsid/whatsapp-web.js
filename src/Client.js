@@ -1037,37 +1037,26 @@ class Client extends EventEmitter {
                 return undefined;
             }
 
-            const result = await this.pupPage.evaluate(async (msgId) => {
+            const result = await this.pupPage.evaluate(async (message) => {
                 const msg = window.Store.Msg.get(msgId);
-                if (msg.mediaData.mediaStage != "RESOLVED") {
-                    // try to resolve media
-                    await msg.downloadMedia(true, 1);
-                }
-
-                if (msg.mediaData.mediaStage.includes("ERROR")) {
-                    // media could not be downloaded
-                    return undefined;
-                }
-
-                const mediaUrl = msg.clientUrl || msg.deprecatedMms3Url;
-
-                const buffer = await window.WWebJS.downloadBuffer(mediaUrl);
+                const buffer = await window.WWebJS.downloadBuffer(
+                    message.mediaUrl
+                );
                 const decrypted = await window.Store.CryptoLib.decryptE2EMedia(
-                    msg.type,
+                    message.type,
                     buffer,
-                    msg.mediaKey,
-                    msg.mimetype
+                    message.mediaKey,
+                    message.mimetype
                 );
                 const data = await window.WWebJS.readBlobAsync(decrypted._blob);
 
                 return {
                     data: data.split(",")[1],
-                    mimetype: msg.mimetype,
-                    filename: msg.filename,
+                    mimetype: message.mimetype,
+                    filename: message.filename,
                 };
-            }, message.serializedId);
+            }, message);
 
-          
             if (!result) return undefined;
             return new MessageMedia(
                 result.mimetype,
