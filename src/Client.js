@@ -1065,7 +1065,7 @@ class Client extends EventEmitter {
                     mimetype: msg.mimetype,
                     filename: msg.filename,
                 };
-            }, message.id._serialized);
+            }, message.serializedId);
 
           
             if (!result) return undefined;
