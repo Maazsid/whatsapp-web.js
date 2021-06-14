@@ -877,11 +877,15 @@ class Client extends EventEmitter {
      * @returns {Promise<string>}
      */
     async getProfilePicUrl(contactId) {
-        const profilePic = await this.pupPage.evaluate((contactId) => {
-            return window.Store.Wap.profilePicFind(contactId);
-        }, contactId);
+        try {
+            const profilePic = await this.pupPage.evaluate((contactId) => {
+                return window.Store.Wap.profilePicFind(contactId);
+            }, contactId);
 
-        return profilePic ? profilePic.eurl : undefined;
+            return profilePic ? profilePic.eurl : undefined;
+        } catch (err) {
+            return null;
+        }
     }
 
     /**
