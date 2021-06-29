@@ -662,7 +662,7 @@ class Client extends EventEmitter {
             return ChatFactory.create(this, chat);
         }
         catch(err){
-            return err
+            return null
         }
     }
 
