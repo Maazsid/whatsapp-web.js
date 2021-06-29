@@ -654,11 +654,16 @@ class Client extends EventEmitter {
      * @returns {Promise<Chat>}
      */
     async getChatById(chatId) {
-        let chat = await this.pupPage.evaluate(async (chatId) => {
-            return await window.WWebJS.getChat(chatId);
-        }, chatId);
-
-        return ChatFactory.create(this, chat);
+        try{
+            let chat = await this.pupPage.evaluate(async (chatId) => {
+                return await window.WWebJS.getChat(chatId);
+            }, chatId);
+    
+            return ChatFactory.create(this, chat);
+        }
+        catch(err){
+            return err
+        }
     }
 
     /**
