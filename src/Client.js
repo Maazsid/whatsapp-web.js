@@ -927,7 +927,7 @@ class Client extends EventEmitter {
                 return undefined;
             }
     
-            const result = await this.client.pupPage.evaluate(async (message) => {
+            const result = await this.pupPage.evaluate(async (message) => {
 
             const decryptedMedia = await window.Store.DownloadManager.downloadAndDecrypt({
                     directPath: message.directPath,
