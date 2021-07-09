@@ -43,6 +43,11 @@ class Message extends Base {
          */
         this.hasMedia = Boolean(data.mediaKey && data.directPath);
 
+        this.directPath = data.directPath;
+        this.encFilehash = data.encFilehash;
+        this.filehash = data.filehash;
+        this.mediaKeyTimestamp = data.mediaKeyTimestamp;
+
         /**
          * Message content
          * @type {string}

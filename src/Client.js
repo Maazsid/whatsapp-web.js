@@ -551,11 +551,16 @@ class Client extends EventEmitter {
      * @returns {Promise<Chat>}
      */
     async getChatById(chatId) {
-        let chat = await this.pupPage.evaluate(async chatId => {
-            return await window.WWebJS.getChat(chatId);
-        }, chatId);
-
-        return ChatFactory.create(this, chat);
+        try{
+            let chat = await this.pupPage.evaluate(async chatId => {
+                return await window.WWebJS.getChat(chatId);
+            }, chatId);
+    
+            return ChatFactory.create(this, chat);
+        }
+        catch(err){
+            return null;
+        }
     }
 
     /**
@@ -576,11 +581,16 @@ class Client extends EventEmitter {
      * @returns {Promise<Contact>}
      */
     async getContactById(contactId) {
-        let contact = await this.pupPage.evaluate(contactId => {
-            return window.WWebJS.getContact(contactId);
-        }, contactId);
-
-        return ContactFactory.create(this, contact);
+        try{
+            let contact = await this.pupPage.evaluate(contactId => {
+                return window.WWebJS.getContact(contactId);
+            }, contactId);
+    
+            return ContactFactory.create(this, contact);
+        }
+        catch(err){
+            return null;
+        }
     }
 
     /**
@@ -762,11 +772,16 @@ class Client extends EventEmitter {
      * @returns {Promise<string>}
      */
     async getProfilePicUrl(contactId) {
-        const profilePic = await this.pupPage.evaluate((contactId) => {
-            return window.Store.Wap.profilePicFind(contactId);
-        }, contactId);
-
-        return profilePic ? profilePic.eurl : undefined;
+        try{
+            const profilePic = await this.pupPage.evaluate((contactId) => {
+                return window.Store.Wap.profilePicFind(contactId);
+            }, contactId);
+    
+            return profilePic ? profilePic.eurl : undefined;
+        }
+        catch(err){
+            return null;
+        }
     }
 
     /**
@@ -903,6 +918,42 @@ class Client extends EventEmitter {
         }, labelId);
 
         return Promise.all(chatIds.map(id => this.getChatById(id)));
+    }
+
+
+    async downloadMessageMedia(message) {
+        try {
+            if (!this.hasMedia) {
+                return undefined;
+            }
+    
+            const result = await this.client.pupPage.evaluate(async (message) => {
+
+            const decryptedMedia = await window.Store.DownloadManager.downloadAndDecrypt({
+                    directPath: message.directPath,
+                    encFilehash: message.encFilehash,
+                    filehash: message.filehash,
+                    mediaKey: message.mediaKey,
+                    mediaKeyTimestamp: message.mediaKeyTimestamp,
+                    type: message.type,
+                    signal: (new AbortController).signal
+                });
+    
+                const data = window.WWebJS.arrayBufferToBase64(decryptedMedia);
+    
+                return {
+                    data,
+                    mimetype: message.mimetype,
+                    filename: message.filename
+                };
+    
+            }, message);
+    
+            if (!result) return undefined;
+            return new MessageMedia(result.mimetype, result.data, result.filename);
+        } catch (err) {
+            return null;
+        }
     }
 }
 
