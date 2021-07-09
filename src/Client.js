@@ -923,10 +923,6 @@ class Client extends EventEmitter {
 
     async downloadMessageMedia(message) {
         try {
-            if (!this.hasMedia) {
-                return undefined;
-            }
-    
             const result = await this.pupPage.evaluate(async (message) => {
 
             const decryptedMedia = await window.Store.DownloadManager.downloadAndDecrypt({
