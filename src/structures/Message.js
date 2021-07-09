@@ -47,7 +47,8 @@ class Message extends Base {
         this.encFilehash = data.encFilehash;
         this.filehash = data.filehash;
         this.mediaKeyTimestamp = data.mediaKeyTimestamp;
-
+        this.mimetype = data.mimetype;
+        this.filename = data.filename;
         /**
          * Message content
          * @type {string}
