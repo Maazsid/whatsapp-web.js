@@ -41,15 +41,18 @@ class Message extends Base {
          * Indicates if the message has media available for download
          * @type {boolean}
          */
-        this.hasMedia = data.clientUrl || data.deprecatedMms3Url ? true : false;
 
 
+        this.mediaUrl = data.clientUrl || data.deprecatedMms3Url ? true : false;
+        
+        this.hasMedia = Boolean(data.mediaKey && data.directPath);
+
+        this.directPath = data.directPath;
+        this.encFilehash = data.encFilehash;
+        this.filehash = data.filehash;
+        this.mediaKeyTimestamp = data.mediaKeyTimestamp;
         this.mimetype = data.mimetype;
-
-        this.mediaUrl = data.clientUrl || data.deprecatedMms3Url
-
-        this.filename = data.filename ? data.filename : null;
-
+        this.filename = data.filename;
         /**
          * Message content
          * @type {string}
@@ -100,6 +103,14 @@ class Message extends Base {
          * @type {boolean}
          */
         this.isForwarded = data.isForwarded;
+
+        /**
+         * Indicates how many times the message was forwarded.
+         *
+         * The maximum value is 127.
+         * @type {number}
+         */
+        this.forwardingScore = data.forwardingScore || 0;
 
         /**
          * Indicates if the message is a status update
@@ -199,7 +210,8 @@ class Message extends Base {
 
         /**
          * Links included in the message.
-         * @type {Array<string>}
+         * @type {Array<{link: string, isSuspicious: boolean}>}
+         * 
          */
         this.links = data.links;
 
@@ -311,26 +323,39 @@ class Message extends Base {
 
             if (msg.mediaData.mediaStage != 'RESOLVED') {
                 // try to resolve media
-                await msg.downloadMedia(true, 1);
+                await msg.downloadMedia({
+                    downloadEvenIfExpensive: true, 
+                    rmrReason: 1
+                });
             }
 
-            if (msg.mediaData.mediaStage.includes('ERROR')) {
+            if (msg.mediaData.mediaStage.includes('ERROR') || msg.mediaData.mediaStage === 'FETCHING') {
                 // media could not be downloaded
                 return undefined;
             }
 
-            const mediaUrl = msg.clientUrl || msg.deprecatedMms3Url;
-
-            const buffer = await window.WWebJS.downloadBuffer(mediaUrl);
-            const decrypted = await window.Store.CryptoLib.decryptE2EMedia(msg.type, buffer, msg.mediaKey, msg.mimetype);
-            const data = await window.WWebJS.readBlobAsync(decrypted._blob);
-
-            return {
-                data: data.split(',')[1],
-                mimetype: msg.mimetype,
-                filename: msg.filename
-            };
-
+            try {
+                const decryptedMedia = await window.Store.DownloadManager.downloadAndDecrypt({
+                    directPath: msg.directPath,
+                    encFilehash: msg.encFilehash,
+                    filehash: msg.filehash,
+                    mediaKey: msg.mediaKey,
+                    mediaKeyTimestamp: msg.mediaKeyTimestamp,
+                    type: msg.type,
+                    signal: (new AbortController).signal
+                });
+    
+                const data = window.WWebJS.arrayBufferToBase64(decryptedMedia);
+    
+                return {
+                    data,
+                    mimetype: msg.mimetype,
+                    filename: msg.filename
+                };
+            } catch (e) {
+                if(e.status && e.status === 404) return undefined;
+                throw e;
+            }
         }, this.id._serialized);
 
         if (!result) return undefined;

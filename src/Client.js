@@ -1,30 +1,17 @@
-"use strict";
+'use strict';
 
-const EventEmitter = require("events");
-const puppeteer = require("puppeteer");
-const moduleRaid = require("@pedroslopez/moduleraid/moduleraid");
-const jsQR = require("jsqr");
+const EventEmitter = require('events');
+const puppeteer = require('puppeteer');
+const moduleRaid = require('@pedroslopez/moduleraid/moduleraid');
+const jsQR = require('jsqr');
 
-const Util = require("./util/Util");
-const InterfaceController = require("./util/InterfaceController");
-const {
-    WhatsWebURL,
-    DefaultOptions,
-    Events,
-    WAState,
-} = require("./util/Constants");
-const { ExposeStore, LoadUtils } = require("./util/Injected");
-const ChatFactory = require("./factories/ChatFactory");
-const ContactFactory = require("./factories/ContactFactory");
-const {
-    ClientInfo,
-    Message,
-    MessageMedia,
-    Contact,
-    Location,
-    GroupNotification,
-    Label,
-} = require("./structures");
+const Util = require('./util/Util');
+const InterfaceController = require('./util/InterfaceController');
+const { WhatsWebURL, DefaultOptions, Events, WAState } = require('./util/Constants');
+const { ExposeStore, LoadUtils } = require('./util/Injected');
+const ChatFactory = require('./factories/ChatFactory');
+const ContactFactory = require('./factories/ContactFactory');
+const { ClientInfo, Message, MessageMedia, Contact, Location, GroupNotification , Label, Call } = require('./structures');
 /**
  * Starting point for interacting with the WhatsApp Web API
  * @extends {EventEmitter}
@@ -78,8 +65,16 @@ class Client extends EventEmitter {
      * Sets up events and requirements, kicks off authentication request
      */
     async initialize() {
-        const browser = await puppeteer.launch(this.options.puppeteer);
-        const page = (await browser.pages())[0];
+        let [browser, page] = [null, null];
+        
+        if(this.options.puppeteer && this.options.puppeteer.browserWSEndpoint) {
+            browser = await puppeteer.connect(this.options.puppeteer);
+            page = await browser.newPage();
+        } else {
+            browser = await puppeteer.launch(this.options.puppeteer);
+            page = (await browser.pages())[0];
+        }        
+        
         page.setUserAgent(this.options.userAgent);
 
         this.pupBrowser = browser;
@@ -401,45 +396,34 @@ class Client extends EventEmitter {
             this.emit(Events.BATTERY_CHANGED, { battery, plugged });
         });
 
+        await page.exposeFunction('onIncomingCall', (call) => {
+            /**
+             * Emitted when a call is received
+             * @event Client#incoming_call
+             * @param {object} call
+             * @param {number} call.id - Call id
+             * @param {string} call.peerJid - Who called
+             * @param {boolean} call.isVideo - if is video
+             * @param {boolean} call.isGroup - if is group
+             * @param {boolean} call.canHandleLocally - if we can handle in waweb
+             * @param {boolean} call.outgoing - if is outgoing
+             * @param {boolean} call.webClientShouldHandle - If Waweb should handle
+             * @param {object} call.participants - Participants
+             */
+            const cll = new Call(this,call);
+            this.emit(Events.INCOMING_CALL, cll);
+        });
+        
         await page.evaluate(() => {
-            window.Store.Msg.on("add", (msg) => {
-                if (msg.isNewMsg)
-                    window.onAddMessageEvent(
-                        window.WWebJS.getMessageModel(msg)
-                    );
-            });
-            window.Store.Msg.on("change", (msg) => {
-                window.onChangeMessageEvent(window.WWebJS.getMessageModel(msg));
-            });
-            window.Store.Msg.on("change:type", (msg) => {
-                window.onChangeMessageTypeEvent(
-                    window.WWebJS.getMessageModel(msg)
-                );
-            });
-            window.Store.Msg.on("change:ack", (msg, ack) => {
-                window.onMessageAckEvent(
-                    window.WWebJS.getMessageModel(msg),
-                    ack
-                );
-            });
-            window.Store.Msg.on("change:isUnsentMedia", (msg, unsent) => {
-                if (msg.id.fromMe && !unsent)
-                    window.onMessageMediaUploadedEvent(
-                        window.WWebJS.getMessageModel(msg)
-                    );
-            });
-            window.Store.Msg.on("remove", (msg) => {
-                if (msg.isNewMsg)
-                    window.onRemoveMessageEvent(
-                        window.WWebJS.getMessageModel(msg)
-                    );
-            });
-            window.Store.AppState.on("change:state", (_AppState, state) => {
-                window.onAppStateChangedEvent(state);
-            });
-            window.Store.Conn.on("change:battery", (state) => {
-                window.onBatteryStateChangedEvent(state);
-            });
+            window.Store.Msg.on('add', (msg) => { if (msg.isNewMsg) window.onAddMessageEvent(window.WWebJS.getMessageModel(msg)); });
+            window.Store.Msg.on('change', (msg) => { window.onChangeMessageEvent(window.WWebJS.getMessageModel(msg)); });
+            window.Store.Msg.on('change:type', (msg) => { window.onChangeMessageTypeEvent(window.WWebJS.getMessageModel(msg)); });
+            window.Store.Msg.on('change:ack', (msg,ack) => { window.onMessageAckEvent(window.WWebJS.getMessageModel(msg), ack); });
+            window.Store.Msg.on('change:isUnsentMedia', (msg, unsent) => { if (msg.id.fromMe && !unsent) window.onMessageMediaUploadedEvent(window.WWebJS.getMessageModel(msg)); });
+            window.Store.Msg.on('remove', (msg) => { if (msg.isNewMsg) window.onRemoveMessageEvent(window.WWebJS.getMessageModel(msg)); });
+            window.Store.AppState.on('change:state', (_AppState, state) => { window.onAppStateChangedEvent(state); });
+            window.Store.Conn.on('change:battery', (state) => { window.onBatteryStateChangedEvent(state); });
+            window.Store.Call.on('add', (call) => { window.onIncomingCall(call); });
         });
 
         /**
@@ -655,14 +639,14 @@ class Client extends EventEmitter {
      */
     async getChatById(chatId) {
         try{
-            let chat = await this.pupPage.evaluate(async (chatId) => {
+            let chat = await this.pupPage.evaluate(async chatId => {
                 return await window.WWebJS.getChat(chatId);
             }, chatId);
     
             return ChatFactory.create(this, chat);
         }
         catch(err){
-            return null
+            return null;
         }
     }
 
@@ -684,16 +668,16 @@ class Client extends EventEmitter {
      * @returns {Promise<Contact>}
      */
     async getContactById(contactId) {
-       try{
-        let contact = await this.pupPage.evaluate((contactId) => {
-            return window.WWebJS.getContact(contactId);
-        }, contactId);
-
-        return ContactFactory.create(this, contact);
-       }
-       catch(err){
-           return null;
-       }
+        try{
+            let contact = await this.pupPage.evaluate(contactId => {
+                return window.WWebJS.getContact(contactId);
+            }, contactId);
+    
+            return ContactFactory.create(this, contact);
+        }
+        catch(err){
+            return null;
+        }
     }
 
     /**
@@ -887,13 +871,14 @@ class Client extends EventEmitter {
      * @returns {Promise<string>}
      */
     async getProfilePicUrl(contactId) {
-        try {
+        try{
             const profilePic = await this.pupPage.evaluate((contactId) => {
                 return window.Store.Wap.profilePicFind(contactId);
             }, contactId);
-
+    
             return profilePic ? profilePic.eurl : undefined;
-        } catch (err) {
+        }
+        catch(err){
             return null;
         }
     }
@@ -1047,35 +1032,30 @@ class Client extends EventEmitter {
 
     async downloadMessageMedia(message) {
         try {
-            if (!message.hasMedia) {
-                return undefined;
-            }
-
             const result = await this.pupPage.evaluate(async (message) => {
-                const buffer = await window.WWebJS.downloadBuffer(
-                    message.mediaUrl
-                );
-                const decrypted = await window.Store.CryptoLib.decryptE2EMedia(
-                    message.type,
-                    buffer,
-                    message.mediaKey,
-                    message.mimetype
-                );
-                const data = await window.WWebJS.readBlobAsync(decrypted._blob);
 
+            const decryptedMedia = await window.Store.DownloadManager.downloadAndDecrypt({
+                    directPath: message.directPath,
+                    encFilehash: message.encFilehash,
+                    filehash: message.filehash,
+                    mediaKey: message.mediaKey,
+                    mediaKeyTimestamp: message.mediaKeyTimestamp,
+                    type: message.type,
+                    signal: (new AbortController).signal
+                });
+    
+                const data = window.WWebJS.arrayBufferToBase64(decryptedMedia);
+    
                 return {
-                    data: data.split(",")[1],
+                    data,
                     mimetype: message.mimetype,
-                    filename: message.filename,
+                    filename: message.filename
                 };
+    
             }, message);
-
+    
             if (!result) return undefined;
-            return new MessageMedia(
-                result.mimetype,
-                result.data,
-                result.filename
-            );
+            return new MessageMedia(result.mimetype, result.data, result.filename);
         } catch (err) {
             return null;
         }
